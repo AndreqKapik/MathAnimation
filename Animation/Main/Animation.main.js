@@ -1,0 +1,155 @@
+var filter = document.getElementById('animation');
+var rotate = document.getElementById('rotate');
+var c = document.getElementById("Canvas");
+var ctx = c.getContext("2d");
+var counter = 0;// переменная для подсчета кликов
+var fi = 0;// угол вращения
+var sign = 1;// для того, чтобы держать fi в нужном диапазоне (fi∈[0 , 5*PI/16])
+var lx = 0.1, ly = 0.1, lz = 0.1; // координаты источника света
+var x0 = 150, y0 = 150; // сдвиг относительно начала координат
+var r = 70;// масшатаб
+var k = 100;// расстояние до наблюдателя
+var n; // количество x-координат
+//координаты точек
+var xp = [];
+var yp = [];
+var zp = [];
+// координаты точек после вращения графика на угол fi
+var xcr = [];
+var ycr = [];
+var zcr = [];
+// координаты спроецированных точек
+var xp2 = [];
+var yp2 = [];
+// координаты точек, записанные в нужном нам порядке для применения алгоритма плавающего горизонта (идём по графику снизу-вверх, cлева-направо)
+var xp3 = [];
+var yp3 = [];
+var y_max = []; //Для хранения максимальных значений y при каждом значении x
+ 
+calc();
+rotate_x();
+
+
+
+
+filter.addEventListener('click', function() { // счетчик кликов на кнопку Animation
+    counter++;
+    if (counter < 2){
+        intaervalId = setInterval(rotate_x, 100);
+    } else {
+        counter = 0;
+        clearInterval(intaervalId);
+    }
+});
+
+function calc(){ // рассчет координат точек
+	n=0;
+	for(var i = 0; i <= 2*Math.PI; i+=0.1){
+		n++;
+		for(var j = 0; j <= 2*Math.PI; j+=0.1){
+			xp.push(i);
+			yp.push(j);
+			zp.push(Math.sin(i)*Math.cos(j));
+ 
+		}
+	}
+ 
+}
+ 
+function clear(){ // очищаем холст
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0,0,750,750);
+}
+ 
+function mlt(){// умножаем все координаты на масштаб - r
+	for(var i = 0; i < xp2.length;i++){
+        xp2[i]*=r;
+        yp2[i]*=r;
+ 
+	}
+}
+ 
+function overwrite(){ // переписываем точки в нужном порядке(снизу-вверх, cлева-направо)
+	var ptr2 = 0;
+	for(var i = n-1; i >= 0; i--){
+		for(var j = i ; j < xp2.length; j+=n){
+            xp3[ptr2] = xp2[j];
+            yp3[ptr2] = yp2[j];
+			ptr2++;
+		}
+	}
+ 
+}
+ 
+function draw(){ // функция рисования
+	for(var i = 0; i < n; i++){ // рисуем первую кривую
+		y_max[i]=yp3[i]; // запоминаем y-ки
+ 
+    	var I_D = (xcr[i] * lx + ycr[i] * ly + zcr[i] * lz); // считаем  рассеянную составляющую освещенности в точке
+        ctx.beginPath();
+		if (I_D > 0) { //применяем к точке рассеянную составляющую, когда она > 0
+			ctx.fillStyle = "rgba(" + 255*I_D + "," +255*I_D+","+255*I_D + "," +255 + ")"
+		}else{
+			ctx.fillStyle = "rgba(5,5,5,255)" // фоновая составляющая
+		}
+    	ctx.arc(xp3[i]+x0, yp3[i]+y0, 2, 0, Math.PI*2, true); // cтавим точку
+    	ctx.fill();
+ 
+	}
+ 
+ 
+	for(var i = n; i < xp3.length; i+=n){// рисуем все остальные кривые 
+		for(var j = 0; j < n; j++){
+			if(y_max[j]>yp3[i+j]){// если точка видима, ставим её
+				I_D = (xcr[i+j] * lx + ycr[i+j] * ly + zcr[i+j] * lz);
+					if (I_D > 0){
+					ctx.fillStyle = "rgba(" + 255*I_D + "," +255*I_D+","+255*I_D + "," +255+ ")"
+					} else {
+						ctx.fillStyle = "rgba(5,5,5,255)"
+ 
+					}
+ 
+				ctx.beginPath();
+				ctx.arc(xp3[i+j]+x0, yp3[i+j]+y0, 2, 0, Math.PI*2, true);
+				ctx.fill();
+				y_max[j]=yp3[i+j];
+			}
+		}
+	}
+ 
+ 
+}
+
+rotate.addEventListener('click', rotate_x);
+function rotate_x(){ // рассчет координат после вращения по оси X
+	clear();
+    // рассчитываем угол fi
+	if (fi >= Math.PI*5/16 && sign == 1) sign = 2;
+	if (fi <= 0 && sign == 2) sign = 1;
+	if (sign == 1) fi +=(Math.PI / 16);
+	if (sign == 2) fi -=(Math.PI / 16);
+ 
+ 
+	var ptr1 = 0;
+	for(var i = 0; i < zp.length;i++){
+    	/* формула вращения графика на угол fi по оси X
+    	    x'=x;
+    	    y':=y*cos(fi)+z*sin(fi) ;
+    	    z':=-y*sin(fi)+z*cos(fi) ; */
+		var x=xp[i];
+		var y=yp[i]*Math.cos(fi)+zp[i]*Math.sin(fi);
+		var z=-(yp[i]*Math.sin(fi))+zp[i]*Math.cos(fi);
+    	// запоминаем координаты после вращения
+		xcr[i] = x;
+		ycr[i] = y;
+		zcr[i] = z;
+    	//Проецируем точки на экран по формулам центральной проекции
+		xp2[ptr1] =(k*x/(z+k));
+    	        yp2[ptr1]= (k*y/(z+k));
+		ptr1++;
+	}
+ 
+	mlt();
+	overwrite();
+	draw();
+}
